@@ -187,7 +187,6 @@ jobs:
             - project/.circleci/ansible/inventory.txt   
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
 
   configure-infrastructure:
     docker:
@@ -219,7 +218,6 @@ jobs:
       # Here's where you will add some code to rollback on failure   
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
 
   run-migrations:
     docker:
@@ -257,7 +255,6 @@ jobs:
             fi       
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail      
 
   deploy-frontend:
     docker:
@@ -301,10 +298,8 @@ jobs:
       # Here's where you will add some code to rollback on failure   
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
 
   deploy-backend:
     docker:
@@ -359,10 +354,8 @@ jobs:
       # Here's where you will add some code to rollback on failure  
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
 
   smoke-test:
     docker:
@@ -409,10 +402,8 @@ jobs:
       # Here's where you will add some code to rollback on failure  
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}" 
-          when: on_fail 
 
   cloudfront-update:
     docker:
@@ -451,10 +442,8 @@ jobs:
       # Here's where you will add some code to rollback on failure
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-          when: on_fail 
 
 # cleanup:
 #     docker:
