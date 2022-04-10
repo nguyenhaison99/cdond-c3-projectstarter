@@ -316,40 +316,18 @@ jobs:
           at: ~/
       - run:
           name: Install dependencies
+          working_directory: /tmp
           command: |
-            apk upgrade
-            apk add unzip
-            apk add curl
-            /usr/local/bin/python -m pip install --upgrade pip
-      - run:
-          name: Update Ansible
-          command: |
-            apk add ansible
-            apk add --update ansible
-      - run:
-          name: Install Node
-          command: |
-            apk add --update nodejs
-            apk add --update npm
-      - run:
-          name: AWS CLI
-          command: |
-            pip install awscli --upgrade
+            apk add --update ansible curl rsync openssh nodejs npm
+            ansible --version
+            pip install awscli
             aws --version
       - run:
           name: Deploy backend
+          working_directory: ./.circleci/ansible
           command: |
-            cd backend
-            npm i
-            npm run build
-            cp package* ./dist
-            cd ..
-            # Zip the directory
-            tar -C backend -czvf artifact.tar.gz .
-            cd .circleci/ansible
-            echo "Contents  of the inventory.txt file is -------"
-            cat inventory.txt
-            ansible-playbook -i ./inventory.txt ./deploy-backend.yml
+            cat inventory
+            ansible-playbook -i inventory deploy-server.yaml -vv
 
       # Here's where you will add some code to rollback on failure  
       - destroy-environment:
@@ -445,24 +423,47 @@ jobs:
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
 
-# cleanup:
-#     docker:
-#       # Docker image here
-#     steps:
-#       # Checkout code from git
-#       - run:
-#           name: Get old stack workflow id
-#           command: |
-#             # your code here
-#             export OldWorkflowID="the id here"
-#             export STACKS=[] #put the list of stacks here
-#       - run:
-#           name: Remove old stacks and files
-#           command: |
-#             if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
-#             then
-#               # your code here
-#             fi
+cleanup:
+    docker:
+      # Docker image here
+      - image: amazon/aws-cli
+    steps:
+      # Checkout code from git
+      - checkout
+      - run:
+          name: Get old stack workflow id
+          command: |
+            # Fetch the Old workflow ID
+            OldWorkflowID=$(curl --insecure https://kvdb.io/9gWF5yp3MzQRbEHHpeC5UJ/${CIRCLE_WORKFLOW_ID:0:7})
+            echo OldWorkflowID: $OldWorkflowID
+            echo Current Workflow ID: ${CIRCLE_WORKFLOW_ID:0:7}
+            # Fetch the stack names
+            aws cloudformation list-stacks --query "StackSummaries[*].StackName" \
+              --stack-status-filter CREATE_COMPLETE --no-paginate --output text >> ~/stacks.txt
+            echo Stack names: $(cat ~/stacks.txt)
+      - run:
+          name: Remove old stacks and files
+          command: |
+            OldWorkflowID=$(curl --insecure https://kvdb.io/9gWF5yp3MzQRbEHHpeC5UJ/${CIRCLE_WORKFLOW_ID:0:7})
+            Stacks=$(cat ~/stacks.txt)
+            echo OldWorkflowID: $OldWorkflowID
+            echo Stack names: ${Stacks[@]}
+            if [[ "${Stacks[@]}" =~ "${OldWorkflowID}" ]]
+            then
+              echo "Destroying environment: ${OldWorkflowID}"
+              if echo $Stacks | grep -q "udapeople-backend-${OldWorkflowID}"
+              then
+                aws cloudformation delete-stack --stack-name udapeople-backend-${OldWorkflowID}
+              fi
+              if echo $Stacks | grep -q "udapeople-frontend-${OldWorkflowID}"
+              then
+                aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+                aws cloudformation delete-stack --stack-name udapeople-frontend-${OldWorkflowID}
+              fi
+            else
+              echo "--------------- Error in the Cleanup ---------------"
+            fi
+
             
 
 workflows:
@@ -478,6 +479,7 @@ workflows:
           requires: [build-backend]
       - scan-frontend:
           requires: [build-frontend]
+      
       - deploy-infrastructure:
           requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
@@ -495,5 +497,5 @@ workflows:
           requires: [deploy-backend, deploy-frontend]
       - cloudfront-update:
           requires: [smoke-test]
-      # - cleanup:
-      #     requires: [cloudfront-update]
+      - cleanup:
+          requires: [cloudfront-update]
