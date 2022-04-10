@@ -153,7 +153,6 @@ jobs:
               --tags project=udapeople \
               --stack-name udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7} \
               --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" \
-              --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM"
 
       - run:
           name: Ensure front-end infrastructure exist
@@ -172,7 +171,6 @@ jobs:
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --output text >> .circleci/ansible/inventory.txt
-              --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM"
             
             cat .circleci/ansible/inventory.txt
 
