@@ -19,7 +19,6 @@ commands:
             aws cloudformation delete-stack --stack-name udapeople-backend-<<parameters.workflow_id>>
             aws cloudformation delete-stack --stack-name udapeople-frontend-<<parameters.workflow_id>>
 
-
   revert-migrations:
     description: Revert the last migration if successfully run in the current workflow.  
     parameters:
@@ -154,6 +153,7 @@ jobs:
               --tags project=udapeople \
               --stack-name udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7} \
               --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" \
+              --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM"
 
       - run:
           name: Ensure front-end infrastructure exist
@@ -172,6 +172,7 @@ jobs:
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --output text >> .circleci/ansible/inventory.txt
+              --capabilities "CAPABILITY_IAM" "CAPABILITY_NAMED_IAM"
             
             cat .circleci/ansible/inventory.txt
 
@@ -188,8 +189,6 @@ jobs:
             - project/.circleci/ansible/inventory.txt   
       - destroy-environment:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
-
-      # Here's where you will add some code to rollback on failure      
 
   configure-infrastructure:
     docker:
@@ -282,7 +281,6 @@ jobs:
       - run:
           name: Get backend url and Deploy Frontend Object
           command: |
-            # your code here
             export BACKEND_IP=$(curl --insecure https://kvdb.io/MS8p1MZeDiRn35rA4EwKEL/${CIRCLE_WORKFLOW_ID:0:7})
             export API_URL="http://${BACKEND_IP}:3030"
             echo "API_URL = ${API_URL}"
@@ -321,7 +319,6 @@ jobs:
       - run:
           name: Install dependencies
           command: |
-            # your code here
             apk upgrade
             apk add unzip
             apk add curl
@@ -344,7 +341,6 @@ jobs:
       - run:
           name: Deploy backend
           command: |
-            # your code here
             cd backend
             npm i
             npm run build
@@ -381,7 +377,6 @@ jobs:
       - run:
           name: Get backend url and Backend Smoke Test
           command: |
-            # your code here
             BACKEND_IP=$(aws ec2 describe-instances --query 'Reservations[*].Instances[*].PublicIpAddress' --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" --output text)
             API_URL="http://${BACKEND_IP}:3030"
             echo "API_URL = ${API_URL}"
@@ -412,20 +407,45 @@ jobs:
       - revert-migrations:
           workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"  
 
-#   cloudfront-update:
-#     docker:
-#       # Docker image here that supports AWS CLI
-#     steps:
-#       # Checkout code from git
-#       - run:
-#           name: Install dependencies
-#           command: |
-#             # your code here
-#       - run:
-#           name: Update cloudfront distribution
-#           command: |
-#             # your code here
-#       # Here's where you will add some code to rollback on failure  
+  cloudfront-update:
+    docker:
+      # Docker image here that supports AWS CLI
+      - image: amazon/aws-cli
+    steps:
+      # Checkout code from git
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            # your code here
+            yum update -y
+            yum install -y curl
+            aws --version
+      - run:
+          name: Update cloudfront distribution
+          command: |
+            # your code here
+            export OldWorkflowID=$(aws cloudformation list-exports --query "Exports[?Name==\`WorkflowID\`].Value" --no-paginate --output text)
+  
+            echo $OldWorkflowID >> ~/OldWorkflowID.txt
+            cat ~/OldWorkflowID.txt
+            
+            curl https://kvdb.io/MS8p1MZeDiRn35rA4EwKEL/${CIRCLE_WORKFLOW_ID:0:7} -d $OldWorkflowID
+
+            aws cloudformation deploy \
+              --template-file .circleci/files/cloudfront.yml \
+              --stack-name InitialStack \
+              --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:7}" \
+              --tags project=udapeople
+
+            echo OldWorkflowID: "${OldWorkflowID}"
+            echo Current Workflow ID: ${CIRCLE_WORKFLOW_ID:0:7}
+      
+      # Here's where you will add some code to rollback on failure
+      - destroy-environment:
+          workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}"
+      - revert-migrations:
+          workflow_id: "${CIRCLE_WORKFLOW_ID:0:7}" 
 
 # cleanup:
 #     docker:
@@ -475,7 +495,7 @@ workflows:
           requires: [run-migrations]
       - smoke-test:
           requires: [deploy-backend, deploy-frontend]
-      # - cloudfront-update:
-      #     requires: [smoke-test]
+      - cloudfront-update:
+          requires: [smoke-test]
       # - cleanup:
       #     requires: [cloudfront-update]
